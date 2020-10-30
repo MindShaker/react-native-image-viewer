@@ -1,27 +1,21 @@
 "use strict";
 var __extends = (this && this.__extends) || (function () {
-    var extendStatics = function (d, b) {
-        extendStatics = Object.setPrototypeOf ||
-            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-        return extendStatics(d, b);
-    }
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
     return function (d, b) {
         extendStatics(d, b);
         function __() { this.constructor = d; }
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
-var __assign = (this && this.__assign) || function () {
-    __assign = Object.assign || function(t) {
-        for (var s, i = 1, n = arguments.length; i < n; i++) {
-            s = arguments[i];
-            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
-                t[p] = s[p];
-        }
-        return t;
-    };
-    return __assign.apply(this, arguments);
+var __assign = (this && this.__assign) || Object.assign || function(t) {
+    for (var s, i = 1, n = arguments.length; i < n; i++) {
+        s = arguments[i];
+        for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+            t[p] = s[p];
+    }
+    return t;
 };
 var __rest = (this && this.__rest) || function (s, e) {
     var t = {};
@@ -58,6 +52,21 @@ var ImageViewer = /** @class */ (function (_super) {
         // 记录已加载的图片 index
         _this.loadedIndex = new Map();
         _this.handleLongPressWithIndex = new Map();
+        _this.imageRefs = [];
+        /**
+         * reset Image scale and position
+         */
+        _this.resetImageByIndex = function (index) {
+            _this.imageRefs[index] && _this.imageRefs[index].reset();
+        };
+        /**
+         * 预加载图片
+         */
+        _this.preloadImage = function (index) {
+            if (index < _this.state.imageSizes.length) {
+                _this.loadImage(index + 1);
+            }
+        };
         /**
          * 触发溢出水平滚动
          */
@@ -144,7 +153,8 @@ var ImageViewer = /** @class */ (function (_super) {
             _this.standardPositionX = _this.positionXNumber;
             react_native_1.Animated.timing(_this.positionX, {
                 toValue: _this.positionXNumber,
-                duration: 100
+                duration: _this.props.pageAnimateTime,
+                useNativeDriver: !!_this.props.useNativeDriver
             }).start();
             var nextIndex = (_this.state.currentShowIndex || 0) - 1;
             react_native_1.DeviceEventEmitter.emit('resetZoom', {});
@@ -171,7 +181,8 @@ var ImageViewer = /** @class */ (function (_super) {
             _this.standardPositionX = _this.positionXNumber;
             react_native_1.Animated.timing(_this.positionX, {
                 toValue: _this.positionXNumber,
-                duration: 100
+                duration: _this.props.pageAnimateTime,
+                useNativeDriver: !!_this.props.useNativeDriver
             }).start();
             var nextIndex = (_this.state.currentShowIndex || 0) + 1;
             react_native_1.DeviceEventEmitter.emit('resetZoom', {});
@@ -270,24 +281,26 @@ var ImageViewer = /** @class */ (function (_super) {
         };
         return _this;
     }
-    ImageViewer.prototype.componentWillMount = function () {
+    ImageViewer.prototype.componentDidMount = function () {
         this.init(this.props);
     };
-    ImageViewer.prototype.componentWillReceiveProps = function (nextProps) {
-        var _this = this;
-        if (nextProps.index !== this.state.currentShowIndex) {
-            this.setState({
-                currentShowIndex: nextProps.index
-            }, function () {
-                // 立刻预加载要看的图
-                _this.loadImage(nextProps.index || 0);
-                _this.jumpToCurrentImage();
-                // 显示动画
-                react_native_1.Animated.timing(_this.fadeAnim, {
-                    toValue: 1,
-                    duration: 200
-                }).start();
-            });
+    ImageViewer.getDerivedStateFromProps = function (nextProps, prevState) {
+        if (nextProps.index !== prevState.prevIndexProp) {
+            return { currentShowIndex: nextProps.index, prevIndexProp: nextProps.index };
+        }
+        return null;
+    };
+    ImageViewer.prototype.componentDidUpdate = function (prevProps, prevState) {
+        if (prevProps.index !== this.props.index) {
+            // 立刻预加载要看的图
+            this.loadImage(this.props.index || 0);
+            this.jumpToCurrentImage();
+            // 显示动画
+            react_native_1.Animated.timing(this.fadeAnim, {
+                toValue: 1,
+                duration: 200,
+                useNativeDriver: !!this.props.useNativeDriver
+            }).start();
         }
     };
     /**
@@ -311,6 +324,7 @@ var ImageViewer = /** @class */ (function (_super) {
         });
         this.setState({
             currentShowIndex: nextProps.index,
+            prevIndexProp: nextProps.index || 0,
             imageSizes: imageSizes
         }, function () {
             // 立刻预加载要看的图
@@ -321,7 +335,8 @@ var ImageViewer = /** @class */ (function (_super) {
             // 显示动画
             react_native_1.Animated.timing(_this.fadeAnim, {
                 toValue: 1,
-                duration: 200
+                duration: 200,
+                useNativeDriver: !!nextProps.useNativeDriver
             }).start();
         });
     };
@@ -376,6 +391,17 @@ var ImageViewer = /** @class */ (function (_super) {
         if (!image.url || image.url.startsWith("file:")) {
             imageLoaded = true;
         }
+        // 如果已知源图片宽高，直接设置为 success
+        if (image.width && image.height) {
+            if (this.props.enablePreload && imageLoaded === false) {
+                react_native_1.Image.prefetch(image.url);
+            }
+            imageStatus.width = image.width;
+            imageStatus.height = image.height;
+            imageStatus.status = 'success';
+            saveImageSize();
+            return;
+        }
         react_native_1.Image.getSize(image.url, function (width, height) {
             imageStatus.width = width;
             imageStatus.height = height;
@@ -392,6 +418,7 @@ var ImageViewer = /** @class */ (function (_super) {
             catch (newError) {
                 // Give up..
                 imageStatus.status = 'fail';
+                saveImageSize();
             }
         });
     };
@@ -402,7 +429,8 @@ var ImageViewer = /** @class */ (function (_super) {
         this.positionXNumber = this.standardPositionX;
         react_native_1.Animated.timing(this.positionX, {
             toValue: this.standardPositionX,
-            duration: 150
+            duration: 150,
+            useNativeDriver: !!this.props.useNativeDriver
         }).start();
     };
     /**
@@ -440,7 +468,7 @@ var ImageViewer = /** @class */ (function (_super) {
             }
             var Wrapper = function (_a) {
                 var children = _a.children, others = __rest(_a, ["children"]);
-                return (<react_native_image_pan_zoom_1.default cropWidth={_this.width} cropHeight={_this.height} maxOverflow={_this.props.maxOverflow} horizontalOuterRangeOffset={_this.handleHorizontalOuterRangeOffset} responderRelease={_this.handleResponderRelease} onLongPress={_this.handleLongPressWithIndex.get(index)} onClick={_this.handleClick} onDoubleClick={_this.handleDoubleClick} enableSwipeDown={_this.props.enableSwipeDown} onSwipeDown={_this.handleSwipeDown} pinchToZoom={_this.props.enableImageZoom} enableDoubleClickZoom={_this.props.enableImageZoom} doubleClickInterval={_this.props.doubleClickInterval} {...others}>
+                return (<react_native_image_pan_zoom_1.default cropWidth={_this.width} cropHeight={_this.height} maxOverflow={_this.props.maxOverflow} horizontalOuterRangeOffset={_this.handleHorizontalOuterRangeOffset} responderRelease={_this.handleResponderRelease} onMove={_this.props.onMove} onLongPress={_this.handleLongPressWithIndex.get(index)} onClick={_this.handleClick} onDoubleClick={_this.handleDoubleClick} enableSwipeDown={_this.props.enableSwipeDown} swipeDownThreshold={_this.props.swipeDownThreshold} onSwipeDown={_this.handleSwipeDown} pinchToZoom={_this.props.enableImageZoom} enableDoubleClickZoom={_this.props.enableImageZoom} doubleClickInterval={_this.props.doubleClickInterval} {...others}>
           {children}
         </react_native_image_pan_zoom_1.default>);
             };
@@ -469,7 +497,10 @@ var ImageViewer = /** @class */ (function (_super) {
                         image.props.currentIndex = _this.state.currentShowIndex;
                         image.props.index = index;
                     }
-                    return (<react_native_image_pan_zoom_1.default key={index} cropWidth={_this.width} cropHeight={_this.height} maxOverflow={_this.props.maxOverflow} horizontalOuterRangeOffset={_this.handleHorizontalOuterRangeOffset} responderRelease={_this.handleResponderRelease} onLongPress={_this.handleLongPressWithIndex.get(index)} onClick={_this.handleClick} onDoubleClick={_this.handleDoubleClick} imageWidth={width} imageHeight={height} enableSwipeDown={_this.props.enableSwipeDown} onSwipeDown={_this.handleSwipeDown} pinchToZoom={_this.props.enableImageZoom} enableDoubleClickZoom={_this.props.enableImageZoom} doubleClickInterval={_this.props.doubleClickInterval}>
+                    if (_this.props.enablePreload) {
+                        _this.preloadImage(_this.state.currentShowIndex || 0);
+                    }
+                    return (<react_native_image_pan_zoom_1.default key={index} ref={function (el) { return (_this.imageRefs[index] = el); }} cropWidth={_this.width} cropHeight={_this.height} maxOverflow={_this.props.maxOverflow} horizontalOuterRangeOffset={_this.handleHorizontalOuterRangeOffset} responderRelease={_this.handleResponderRelease} onMove={_this.props.onMove} onLongPress={_this.handleLongPressWithIndex.get(index)} onClick={_this.handleClick} onDoubleClick={_this.handleDoubleClick} imageWidth={width} imageHeight={height} enableSwipeDown={_this.props.enableSwipeDown} swipeDownThreshold={_this.props.swipeDownThreshold} onSwipeDown={_this.handleSwipeDown} panToMove={!_this.state.isShowMenu} pinchToZoom={_this.props.enableImageZoom && !_this.state.isShowMenu} enableDoubleClickZoom={_this.props.enableImageZoom && !_this.state.isShowMenu} doubleClickInterval={_this.props.doubleClickInterval} minScale={_this.props.minScale} maxScale={_this.props.maxScale}>
               {_this.props.renderImage(image.props)}
             </react_native_image_pan_zoom_1.default>);
                 case 'fail':
@@ -516,7 +547,7 @@ var ImageViewer = /** @class */ (function (_super) {
                 </react_native_1.TouchableOpacity>
               </react_native_1.View>)}
           <react_native_1.View style={[{ bottom: 0, position: 'absolute', zIndex: 9 }, this.props.footerContainerStyle]}>
-            {this.props.renderFooter(this.state.currentShowIndex)}
+            {this.props.renderFooter(this.state.currentShowIndex || 0)}
           </react_native_1.View>
         </react_native_1.Animated.View>
       </react_native_1.Animated.View>);
@@ -524,6 +555,11 @@ var ImageViewer = /** @class */ (function (_super) {
     ImageViewer.prototype.getMenu = function () {
         if (!this.state.isShowMenu) {
             return null;
+        }
+        if (this.props.menus) {
+            return (<react_native_1.View style={this.styles.menuContainer}>
+          {this.props.menus({ cancel: this.handleLeaveMenu, saveToLocal: this.saveToLocal })}
+        </react_native_1.View>);
         }
         return (<react_native_1.View style={this.styles.menuContainer}>
         <react_native_1.View style={this.styles.menuShadow}/>
