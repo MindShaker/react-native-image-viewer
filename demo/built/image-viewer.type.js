@@ -56,6 +56,23 @@ var Props = /** @class */ (function () {
          */
         this.enableSwipeDown = false;
         /**
+         * Preload quantity
+         */
+        this.preLoadQty = 2;
+        /**
+         * 是否预加载图片
+         */
+        this.enablePreload = false;
+        /**
+         * 翻页时的动画时间
+         */
+        this.pageAnimateTime = 100;
+        /**
+         * 是否启用原生动画驱动
+         * Whether to use the native code to perform animations.
+         */
+        this.useNativeDriver = false;
+        /**
          * 长按图片的回调
          */
         this.onLongPress = function () {
@@ -78,6 +95,9 @@ var Props = /** @class */ (function () {
          * 针对安卓不支持 saveToCameraRoll 远程图片，可以在安卓调用此回调，调用安卓原生接口
          */
         this.onSave = function () {
+            //
+        };
+        this.onMove = function () {
             //
         };
         /**
@@ -166,6 +186,10 @@ var State = /** @class */ (function () {
          * 当前显示第几个
          */
         this.currentShowIndex = 0;
+        /**
+         * Used to detect if parent component applied new index prop
+         */
+        this.prevIndexProp = 0;
         /**
          * 图片拉取是否完毕了
          */
